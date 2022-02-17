@@ -89,11 +89,21 @@ ops.load(30,4.5*kip,0,0)
 
 Wy = -1.1*klf
 Wx = 0.
-Ew = {1:['-beamUniform',Wy,Wx]}
+Ew = {13:['-beamUniform',Wy,Wx],
+      14:['-beamUniform',Wy,Wx],
+      15:['-beamUniform',Wy,Wx],
+      16:['-beamUniform',Wy,Wx],
+      17:['-beamUniform',Wy,Wx],
+      18:['-beamUniform',Wy,Wx],
+      19:['-beamUniform',Wy,Wx],
+      20:['-beamUniform',Wy,Wx],
+      21:['-beamUniform',Wy,Wx]}
 
-for dead in range(13,22):
-    ops.eleLoad('-ele',dead,'-type',Ew[1][0],Ew[1][1],Ew[1][2])
-
+for beamtag in Ew:
+    ops.eleLoad('-ele',beamtag,'-type',Ew[beamtag][0],Ew[beamtag][1],Ew[beamtag][2]) 
+    print('assigned -1.1klf to')
+    print(beamtag)
+    
 #_______________TYPE OF ANALYSIS____________
 
 ops.system('BandGen') #has to do with stiffness matrix and if its banded
@@ -133,8 +143,25 @@ opsvis.plot_defo()
 
 
 
+#plt.figure()
+#minVal,maxVal = opsvis.section_force_diagram_2d('M',Ew,4.5e-5)
+#plt.title(f'Bending moments,max ={maxVal:.2f}, min ={minVal:.2f}')
+
+#plt.show()
+
+
+sfacN, sfacV, sfacM = 3.e-4, 5.e-3, 10.e-5
+
 plt.figure()
-minVal,maxVal = opsvis.section_force_diagram_2d('M',Ew,4.5e-5)
-plt.title(f'Bending moments,max ={maxVal:.2f}, min ={minVal:.2f}')
+minVal, maxVal = opsvis.section_force_diagram_2d('N', Ew, sfacN)
+plt.title(f'Axial forces, max = {maxVal:.2f}, min = {minVal:.2f}')
+
+plt.figure()
+minVal, maxVal = opsvis.section_force_diagram_2d('V', Ew, sfacV)
+plt.title(f'Shear forces, max = {maxVal:.2f}, min = {minVal:.2f}')
+
+plt.figure()
+minVal, maxVal = opsvis.section_force_diagram_2d('M', Ew, sfacM)
+plt.title(f'Bending moments, max = {maxVal:.2f}, min = {minVal:.2f}')
 
 plt.show()
