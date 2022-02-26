@@ -1,0 +1,178 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Feb 11 14:01:24 2022
+
+@author: bruno
+"""
+
+#____________________________SETTING UP MODEL_________________________________
+
+import openseespy.opensees as ops #importing opensees library
+import openseespy.postprocessing.ops_vis as opsvis #importing opensees visualization library
+
+import matplotlib.pyplot as plt #importing python module to plot general stuff
+import openseespy.postprocessing.Get_Rendering as opsplt
+ops.wipe() #cleaning model before running analysis
+
+#-------------Change line below if model is in 3D-----------------------------
+
+ops.model('basic','-ndm',2,'-ndf',3) #creating model
+
+
+#____________________________SETTING UP UNITS_________________________________
+#-------------Results of this analysis will be in inch, lbs, psi, change below if needed
+inch = 1.
+ft = 12*inch
+lb = 1.
+kip = 1000*lb
+plf = 1*lb/(1*ft)
+klf = 1*kip/(1*ft)
+ksi = 1000*lb/inch**2
+
+beamL = 24*ft
+colL = 12*ft
+E = 29000*ksi
+I = 758*inch**4
+A = 100*inch**2
+
+
+
+#_____________________SETTING UP NODES AND CONNECTIVITY________________________
+
+#Build nodes left to right, bottom to top
+
+stories = 10
+bays = 5
+
+print('node generation below')
+
+for y in range(0,stories*10+10,10):
+    for x in range(0,bays+1): 
+        ops.node((x+y),x*beamL,y/10*colL)
+        print(x+y)
+        
+#support definition
+for f in range(0,bays+1):
+    ops.fix(f,1,1,1)
+
+ops.geomTransf('Linear',1,) #transforms stiffness and force from local to global coords
+
+#column definition
+n=0 #counter for columns
+for vert in range(0,stories*10,10):
+    for hor in range(0,bays+1):
+        n=n+1
+        ops.element('elasticBeamColumn',n,hor+vert,hor+vert+10,A,E,I,1)
+
+print('Final column tag is')
+print(n)
+
+#beam definition
+m=0 #counter for beams
+for vert in range(10,stories*10+10,10):
+    for hor in range(0,bays):
+        m=m+1
+        ops.element('elasticBeamColumn',m+n,hor+vert,hor+vert+1,A,E,I,1)
+        
+print('Final beam tag is')
+print(m+n)        
+        
+#element(’elasticBeamColumn’, eleTag, *eleNodes, Area, E_mod, Iz, transfTag, <’-mass’, mass>, <’-cMass’>, <’-release’, releaseCode>)
+#ops.element('elasticBeamColumn',1,1,2,A,E,I,1)
+
+#creating TimeSeries (relationship between time and load)
+ops.timeSeries('Linear',1)
+ops.pattern('Plain',1,1)
+
+#load format is  ops.load(nodetag,Px,Py,Mz)
+
+ops.load((stories*10-20),1.5*kip,0,0)
+ops.load((stories*10-10),3*kip,0,0)
+ops.load((stories*10),4.5*kip,0,0)
+
+Wy = -1.1*klf
+Wx = 0.
+
+Ew = {}
+
+values = ['-beamUniform',Wy,Wx]
+for i in range(n+1,m+n+1):
+    Ew[i]=values
+print(Ew)
+
+#Ew = {13:['-beamUniform',Wy,Wx],
+#      14:['-beamUniform',Wy,Wx],
+#      15:['-beamUniform',Wy,Wx],
+#      16:['-beamUniform',Wy,Wx],
+#      17:['-beamUniform',Wy,Wx],
+#      18:['-beamUniform',Wy,Wx],
+#      19:['-beamUniform',Wy,Wx],
+#      20:['-beamUniform',Wy,Wx],
+#      21:['-beamUniform',Wy,Wx]}
+
+for beamtag in Ew:
+    ops.eleLoad('-ele',beamtag,'-type',Ew[beamtag][0],Ew[beamtag][1],Ew[beamtag][2]) 
+    print('assigned -1.1klf to')
+    print(beamtag)
+    
+#_______________TYPE OF ANALYSIS____________
+
+ops.system('BandGen') #has to do with stiffness matrix and if its banded
+ops.numberer('RCM') #provides mapping between dof at nodes and equation numbers
+ops.constraints('Plain') #constraint handler
+ops.integrator('LoadControl',1.0) #can be load control, or displacement control
+ops.algorithm('Linear') #linear takes one iteration, this is where newton-raphson could be used
+ops.analysis('Static') #type of analysis
+ops.analyze(1)
+#ops.loadConst('-time',0.0)
+
+
+
+print('Displacements at top level')
+print(ops.nodeDisp((stories*10),1))
+print(ops.nodeDisp((stories*10),2))
+print(ops.nodeDisp((stories*10),3))
+
+print('Displacement at 3rd level')
+print(ops.nodeDisp((stories*10-10),1))
+print(ops.nodeDisp((stories*10-10),2))
+print(ops.nodeDisp((stories*10-10),3))
+
+print('Displacement at 2nd level')
+print(ops.nodeDisp((stories*10-20),1))
+print(ops.nodeDisp((stories*10-20),2))
+print(ops.nodeDisp((stories*10-20),3))
+
+print('Displacement at base level')
+print(ops.nodeDisp(0,1))
+print(ops.nodeDisp(0,2))
+print(ops.nodeDisp(0,3))
+
+
+opsplt.plot_model()
+opsvis.plot_defo()
+
+
+
+#plt.figure()
+#minVal,maxVal = opsvis.section_force_diagram_2d('M',Ew,4.5e-5)
+#plt.title(f'Bending moments,max ={maxVal:.2f}, min ={minVal:.2f}')
+
+#plt.show()
+
+
+sfacN, sfacV, sfacM = 3.e-4, 5.e-3, 10.e-5
+
+plt.figure()
+minVal, maxVal = opsvis.section_force_diagram_2d('N', Ew, sfacN)
+plt.title(f'Axial forces, max = {maxVal:.2f}, min = {minVal:.2f}')
+
+plt.figure()
+minVal, maxVal = opsvis.section_force_diagram_2d('V', Ew, sfacV)
+plt.title(f'Shear forces, max = {maxVal:.2f}, min = {minVal:.2f}')
+
+plt.figure()
+minVal, maxVal = opsvis.section_force_diagram_2d('M', Ew, sfacM)
+plt.title(f'Bending moments, max = {maxVal:.2f}, min = {minVal:.2f}')
+
+plt.show()
